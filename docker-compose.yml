@@ -1,0 +1,46 @@
+version: '3'
+services:
+  server:
+    build: .
+    working_dir: /usr/src/app
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/usr/src/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://0.0.0.0:5000"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    command: runServer.sh
+
+  trainmodel: #
+    build: .
+    working_dir: /usr/src/app
+    volumes:
+      - .:/usr/src/app
+    links:
+      - "server:localhost"
+    depends_on:
+      server:
+        condition: service_healthy
+    command: ["python", "clf-train.py", "clf-model", "http://server:5000", "--outputTestData", "test.csv"]
+
+  servemodel:
+    build: .
+    depends_on:
+      trainmodel:
+        condition: service_started
+      server:
+        condition: service_healthy
+    working_dir: /usr/src/app
+    ports:
+      - "1234:1234"
+    volumes:
+      - .:/usr/src/app
+    links:
+      - "server:server"
+    environment:
+      - MLFLOW_TRACKING_URI=http://server:5000
+    command: ["serveModel.sh", "models:/clf-model/Staging"]
