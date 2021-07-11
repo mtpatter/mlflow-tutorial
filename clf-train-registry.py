@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """Example for training a random forest classifier in sklearn
-   and using mlflow to save a model.
+   and using mlflow to save and register a model.
 """
 
 import argparse
@@ -38,13 +38,16 @@ def wait_model_transition(model_name, model_version, stage):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('modelPath', type=str,
+    parser.add_argument('artifactPath', type=str,
                         help='Name of mlflow artifact path location to drop model.')
+    parser.add_argument('trackingURI', type=str,
+                        help='mlflow host and port.')
     parser.add_argument('--outputTestData', type=str,
                         help='Name of output csv file if writing split test data.')
     args = parser.parse_args()
 
-    model_path = args.modelPath
+    artifact_path = args.artifactPath
+    tracking_uri = args.trackingURI
 
     # Load a standard machine learning dataset
     cancer = load_breast_cancer()
@@ -86,6 +89,10 @@ def main():
     # Train the model
     model.fit(x_train, y_train)
 
+    # Grab some metrics
+    accuracy_train = model.score(x_train, y_train)
+    accuracy_test = model.score(x_test, y_test)
+
     def overwrite_predict(func):
         def wrapper(*args, **kwargs):
             result = func(*args, **kwargs)
@@ -95,13 +102,45 @@ def main():
     # Overwriting the model to use predict to output probabilities
     model.predict = overwrite_predict(model.predict_proba)
 
-    try:
-        mlflow.sklearn.save_model(model, model_path)
-        print("Generating new model in path {}".format(model_path))
+    # Set up mlflow tracking params for the registry
+    mlflow.set_tracking_uri(tracking_uri)
+    mlflow.set_experiment("my-experiment")
 
+    client = MlflowClient()
+
+    # Start a run in the experiment and save and register the model and metrics
+    with mlflow.start_run() as run:
+        run_num = run.info.run_id
+        model_uri = "runs:/{run_id}/{artifact_path}".format(run_id=run_num, artifact_path=artifact_path)
+
+        mlflow.log_metric('accuracy_train', accuracy_train)
+        mlflow.log_metric('accuracy_test', accuracy_test)
+
+        mlflow.sklearn.log_model(model, artifact_path)
+
+        mlflow.register_model(model_uri=model_uri,
+                              name=artifact_path)
+
+    # Grab this latest model version
+    model_version_infos = client.search_model_versions("name = '%s'" % artifact_path)
+    new_model_version = max([model_version_info.version for model_version_info in model_version_infos])
+
+    # Add a description
+    client.update_model_version(
+      name=artifact_path,
+      version=new_model_version,
+      description="Random forest scikit-learn model with 100 decision trees."
+    )
+
+    # Necessary to wait to version models
+    try:
+        # Move the previous model to None version
+        wait_model_transition(artifact_path, int(new_model_version)-1, "None")
     except:
-        print("Using existing model in path {}".format(model_path))
         pass
+
+    # Move the latest model to Staging (could also be Production)
+    wait_model_transition(artifact_path, new_model_version, "Staging")
 
 
 if __name__ == "__main__":
