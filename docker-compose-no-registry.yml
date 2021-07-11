@@ -1,0 +1,20 @@
+version: '3'
+services:
+  trainmodel: #
+    build: .
+    working_dir: /usr/src/app
+    volumes:
+      - .:/usr/src/app
+    command: ["python", "clf-train.py", "clf-model", "--outputTestData", "test.csv"]
+
+  servemodel:
+    build: .
+    depends_on:
+      trainmodel:
+        condition: service_started
+    working_dir: /usr/src/app
+    ports:
+      - "1234:1234"
+    volumes:
+      - .:/usr/src/app
+    command: ["serveModel.sh", "clf-model"]

@@ -25,7 +25,7 @@ services:
     depends_on:
       server:
         condition: service_healthy
-    command: ["python", "clf-train.py", "clf-model", "http://server:5000", "--outputTestData", "test.csv"]
+    command: ["python", "clf-train-registry.py", "clf-model", "http://server:5000", "--outputTestData", "test.csv"]
 
   servemodel:
     build: .
