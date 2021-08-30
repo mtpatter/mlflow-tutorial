@@ -1,5 +1,9 @@
 # mlflow-tutorial
 
+![img](assets/cartoon-serve-api.png)
+
+I walk through this tutorial and others on my [Medium blog](https://maria-patterson.medium.com/).  Here is a friend link for open access to the article on Towards Data Science: [*Machine learning model serving for newbies with MLflow*](https://towardsdatascience.com/machine-learning-model-serving-for-newbies-with-mlflow-76f9f0ac3cb2?sk=3fabd570be956c5830591f9ac0fa7991).  I'll always add friend links to my GitHub tutorials for free Medium access, but if you'd like to sign up for a Medium membership, I'd be grateful if you could use my [membership referral link](https://maria-patterson.medium.com/membership) to contribute to my Saturday morning fancy coffee fund.
+
 This GitHub repo walks through an example of training a classifier model
 with sklearn and serving the model with mlflow.
 The first section saves the mlflow model locally to disk, and the second
