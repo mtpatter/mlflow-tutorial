@@ -8,32 +8,11 @@ import argparse
 import pandas as pd
 import mlflow
 import mlflow.sklearn
-import time
-from mlflow.tracking import MlflowClient
 from sklearn.datasets import load_breast_cancer
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from mlflow.entities.model_registry.model_version_status import ModelVersionStatus
-
-
-def wait_model_transition(model_name, model_version, stage):
-    client = MlflowClient()
-    for _ in range(10):
-        model_version_details = client.get_model_version(name=model_name,
-                                                         version=model_version,
-                                                         )
-        status = ModelVersionStatus.from_string(model_version_details.status)
-        print("Model status: %s" % ModelVersionStatus.to_string(status))
-        if status == ModelVersionStatus.READY:
-            client.transition_model_version_stage(
-              name=model_name,
-              version=model_version,
-              stage=stage,
-            )
-            break
-        time.sleep(1)
 
 
 def main():
@@ -52,25 +31,22 @@ def main():
     df = pd.DataFrame(cancer['data'], columns=cancer['feature_names'])
     df['target'] = cancer['target']
 
-    # Optionally write out a subset of the data, used in this tutorial for inference with the API
-    if args.outputTestData:
-        train, test = train_test_split(df, test_size=0.2)
-        del test['target']
-        test.to_csv('test.csv', index=False)
-
-        features = [x for x in list(train.columns) if x != 'target']
-        x_raw = train[features]
-        y_raw = train['target']
-    else:
-        features = [x for x in list(df.columns) if x != 'target']
-        x_raw = df[features]
-        y_raw = df['target']
+    # Define features and target variables
+    features = [x for x in list(df.columns) if x != 'target']
+    x_raw = df[features]
+    y_raw = df['target']
 
     # Split data into training and testing
-    x_train, x_test, y_train, y_test = train_test_split(x_raw, y_raw,
-                                                        test_size=.20,
-                                                        random_state=123,
-                                                        stratify=y_raw)
+    x_train, x_test, y_train, _ = train_test_split(x_raw, y_raw,
+                                                    test_size=0.20,
+                                                    random_state=123,  # seeding
+                                                    stratify=y_raw)
+
+    # Optionally write test data, used for inference example with the API
+    if args.outputTestData:
+        test_df = pd.DataFrame(data=x_test, columns=features)
+        test_df.to_csv('test.csv', index=False)
+        print("Test data written to 'test.csv'")
 
     # Build a classifier sklearn pipeline
     clf = RandomForestClassifier(n_estimators=100,
@@ -95,13 +71,13 @@ def main():
     # Overwriting the model to use predict to output probabilities
     model.predict = overwrite_predict(model.predict_proba)
 
+    # Save the model locally
     try:
         mlflow.sklearn.save_model(model, model_path)
-        print("Generating new model in path {}".format(model_path))
+        print(f"Model saved at path: {model_path}")
 
-    except:
-        print("Using existing model in path {}".format(model_path))
-        pass
+    except Exception as e:
+        print(f"Error saving model at path {model_path}: {e}. Does it already exist?")
 
 
 if __name__ == "__main__":

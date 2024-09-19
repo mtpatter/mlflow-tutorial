@@ -43,4 +43,4 @@ services:
       - "server:server"
     environment:
       - MLFLOW_TRACKING_URI=http://server:5000
-    command: ["serveModel.sh", "models:/clf-model/Staging"]
+    command: ["serveModel.sh", "models:/clf-model@Staging"]

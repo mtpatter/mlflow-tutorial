@@ -18,22 +18,17 @@ from sklearn.preprocessing import StandardScaler
 from mlflow.entities.model_registry.model_version_status import ModelVersionStatus
 
 
-def wait_model_transition(model_name, model_version, stage):
+def wait_model_ready(model_name, model_version):
     client = MlflowClient()
     for _ in range(10):
         model_version_details = client.get_model_version(name=model_name,
-                                                         version=model_version,
-                                                         )
+                                                         version=model_version)
         status = ModelVersionStatus.from_string(model_version_details.status)
         print("Model status: %s" % ModelVersionStatus.to_string(status))
         if status == ModelVersionStatus.READY:
-            client.transition_model_version_stage(
-              name=model_name,
-              version=model_version,
-              stage=stage,
-            )
-            break
+            return True
         time.sleep(1)
+    return False
 
 
 def main():
@@ -55,25 +50,22 @@ def main():
     df = pd.DataFrame(cancer['data'], columns=cancer['feature_names'])
     df['target'] = cancer['target']
 
-    # Optionally write out a subset of the data, used in this tutorial for inference with the API
-    if args.outputTestData:
-        train, test = train_test_split(df, test_size=0.2)
-        del test['target']
-        test.to_csv('test.csv', index=False)
-
-        features = [x for x in list(train.columns) if x != 'target']
-        x_raw = train[features]
-        y_raw = train['target']
-    else:
-        features = [x for x in list(df.columns) if x != 'target']
-        x_raw = df[features]
-        y_raw = df['target']
+    # Define features and target variables
+    features = [x for x in list(df.columns) if x != 'target']
+    x_raw = df[features]
+    y_raw = df['target']
 
     # Split data into training and testing
     x_train, x_test, y_train, y_test = train_test_split(x_raw, y_raw,
-                                                        test_size=.20,
-                                                        random_state=123,
-                                                        stratify=y_raw)
+                                                    test_size=0.20,
+                                                    random_state=123,  # seeding
+                                                    stratify=y_raw)
+
+    # Optionally write test data, used for inference example with the API
+    if args.outputTestData:
+        test_df = pd.DataFrame(data=x_test, columns=features)
+        test_df.to_csv('test.csv', index=False)
+        print("Test data written to 'test.csv'")
 
     # Build a classifier sklearn pipeline
     clf = RandomForestClassifier(n_estimators=100,
@@ -108,39 +100,67 @@ def main():
 
     client = MlflowClient()
 
+    # Create an input example for logging the model
+    input_example = pd.DataFrame(data=x_train.iloc[:1].values, columns=x_train.columns)
+
     # Start a run in the experiment and save and register the model and metrics
     with mlflow.start_run() as run:
         run_num = run.info.run_id
-        model_uri = "runs:/{run_id}/{artifact_path}".format(run_id=run_num, artifact_path=artifact_path)
+        model_uri = f"runs:/{run_num}/{artifact_path}"
 
         mlflow.log_metric('accuracy_train', accuracy_train)
         mlflow.log_metric('accuracy_test', accuracy_test)
 
-        mlflow.sklearn.log_model(model, artifact_path)
+        # Log the model with input example to infer signature automatically
+        mlflow.sklearn.log_model(
+            sk_model=model,
+            artifact_path=artifact_path,
+            input_example=input_example  # Include the input example here
+        )
 
-        mlflow.register_model(model_uri=model_uri,
-                              name=artifact_path)
+        registered_model_info = mlflow.register_model(model_uri=model_uri,
+                                                      name=artifact_path)
 
-    # Grab this latest model version
-    model_version_infos = client.search_model_versions("name = '%s'" % artifact_path)
-    new_model_version = max([model_version_info.version for model_version_info in model_version_infos])
+    # Get the new model version from registration response
+    new_model_version = registered_model_info.version
 
-    # Add a description
+    # Add a description to the registered model version
     client.update_model_version(
       name=artifact_path,
       version=new_model_version,
       description="Random forest scikit-learn model with 100 decision trees."
     )
 
-    # Necessary to wait to version models
-    try:
-        # Move the previous model to None version
-        wait_model_transition(artifact_path, int(new_model_version)-1, "None")
-    except:
-        pass
+    # Wait for the model to be ready before setting an alias
+    if wait_model_ready(artifact_path, new_model_version):
+        # Set the alias for the new model version to "Staging"
+        client.set_registered_model_alias(
+            name=artifact_path,
+            alias="Staging",
+            version=new_model_version
+        )
+        print(f"Set 'Staging' alias for model '{artifact_path}' \
+            version {new_model_version}")
 
-    # Move the latest model to Staging (could also be Production)
-    wait_model_transition(artifact_path, new_model_version, "Staging")
+        # Verify that the alias was set correctly by checking aliases of this version.
+        try:
+            model_version_details = client.get_model_version(name=artifact_path,
+                                                             version=new_model_version)
+            print(f"Aliases for model '{artifact_path}' \
+                version {new_model_version}: {model_version_details.aliases}")
+
+            if "Staging" in model_version_details.aliases:
+                print(f"Successfully verified 'Staging' alias for model \
+                    '{artifact_path}' version {new_model_version}")
+            else:
+                print(f"Warning: 'Staging' alias not found for model \
+                    '{artifact_path}' version {new_model_version}")
+
+        except Exception as e:
+            print(f"Error verifying alias: {e}")
+
+    else:
+        print("Model did not become ready in time")
 
 
 if __name__ == "__main__":
