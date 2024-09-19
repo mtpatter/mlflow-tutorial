@@ -1,4 +1,4 @@
-FROM python:3.9.5
+FROM python:3.12.6
 
 WORKDIR /usr/src/app
 
@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 ENV MLFLOW_TRACKING_URI=http://localhost:5000
 
 EXPOSE 5000/tcp
-EXPOSE 1234
+EXPOSE 1234/tcp
 
 
 COPY ./runServer.sh /usr/bin/
