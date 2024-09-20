@@ -4,7 +4,7 @@
 
 I walk through this tutorial and others here on GitHub and on my [Medium blog](https://maria-patterson.medium.com/).  Here is a friend link for open access to the article on Towards Data Science: [*Machine learning model serving for newbies with MLflow*](https://towardsdatascience.com/machine-learning-model-serving-for-newbies-with-mlflow-76f9f0ac3cb2?sk=3fabd570be956c5830591f9ac0fa7991).  I'll always add friend links on my GitHub tutorials for free Medium access if you don't have a paid Medium membership [(referral link)](https://maria-patterson.medium.com/membership).  
 
-*[edit 2024 Sep: I've updated this GitHub repo significantly since publishing my Towards Data Science article in order to upgrade to mlflow 2.16. The scripts have been updated but the Jupyter notebook is legacy.]*
+*[edit 2024 Sep: I've updated this GitHub repo significantly since publishing my Towards Data Science article in order to upgrade to mlflow 2.16.2 The scripts have been updated, but the Jupyter notebook is now removed as legacy.]*
 
 If you find any of this useful, I always appreciate contributions to my Saturday morning [fancy coffee fund](https://github.com/sponsors/mtpatter)!
 
